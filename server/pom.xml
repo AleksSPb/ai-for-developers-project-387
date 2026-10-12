@@ -1,0 +1,362 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Сервер календаря бронирования звонков.
+
+  Отдельный Maven-модуль без корневого агрегатора (D1): собирается сам из
+  `server/`, в корне репозитория pom.xml нет и не появится.
+-->
+<project xmlns="http://maven.apache.org/POM/4.0.0" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+  <modelVersion>4.0.0</modelVersion>
+
+  <!--
+    Spring Boot 4.1.1 — последняя стабильная на момент написания.
+
+    Решение D5 называло «4.0.x», и последний патч той ветки (4.0.8) отличается
+    от 4.1.1 только Hibernate: 7.2.24.Final против 7.4.5.Final. Liquibase,
+    драйвер PostgreSQL, Testcontainers, Tomcat и Spring Framework совпадают
+    один в один, поэтому берётся более новая стабильная ветка. Расхождение с D5
+    закрывается в трекере отдельной правкой.
+  -->
+  <parent>
+    <groupId>org.springframework.boot</groupId>
+    <artifactId>spring-boot-starter-parent</artifactId>
+    <version>4.1.1</version>
+    <relativePath/>
+  </parent>
+
+  <groupId>com.hexlet.calendar</groupId>
+  <artifactId>server</artifactId>
+  <version>0.0.2-SNAPSHOT</version>
+  <name>calendar-server</name>
+  <description>Сервер бронирования звонков</description>
+
+  <properties>
+    <!-- D6: Java 25. -->
+    <java.version>25</java.version>
+    <maven.compiler.release>25</maven.compiler.release>
+    <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+
+    <!--
+      Генератор моделей из контракта (D10). Работает в дефолтной сборке: с
+      импортом `api.model` в коде `mvn verify` без моделей не идёт, и профиль
+      `models` прятал это от `mvn verify`, а не чинил. Контракт закоммичен
+      (`vite-project/contract/openapi.yaml`), Node для сборки сервера не нужен —
+      он нужен только чтобы пересобрать сам контракт из `main.tsp`.
+    -->
+    <openapi.generator.version>7.26.0</openapi.generator.version>
+    <contract.file>${project.basedir}/../vite-project/contract/openapi.yaml</contract.file>
+
+    <!--
+      Стиль кода (#104). Версия Checkstyle задана отдельно от версии плагина и
+      переопределяется через `<dependencies>` плагина: 3.6.0 тянет Checkstyle 9.3,
+      а в нём нет модуля `SuppressWithNearbyTextFilter`, который есть в
+      `google_checks.xml`. Без переопределения сборка падает на разборе конфига,
+      а не на нарушениях.
+    -->
+    <checkstyle.plugin.version>3.6.0</checkstyle.plugin.version>
+    <checkstyle.version>14.3.0</checkstyle.version>
+  </properties>
+
+  <dependencies>
+    <dependency>
+      <groupId>org.springframework.boot</groupId>
+      <artifactId>spring-boot-starter-web</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.springframework.boot</groupId>
+      <artifactId>spring-boot-starter-validation</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.springframework.boot</groupId>
+      <artifactId>spring-boot-starter-data-jpa</artifactId>
+    </dependency>
+    <dependency>
+      <groupId>org.postgresql</groupId>
+      <artifactId>postgresql</artifactId>
+      <scope>runtime</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.liquibase</groupId>
+      <artifactId>liquibase-core</artifactId>
+    </dependency>
+    <!--
+      Автоконфигурация Spring Boot. В Boot 4 она вынесена в отдельный модуль, и
+      `spring-boot-starter-data-jpa` его больше не тянет: без этой зависимости
+      Liquibase-core лежит на classpath, но автоконфигурация не появляется в
+      контексте вовсе — миграции молча не выполняются, схемы нет, а приложение
+      стартует. Обнаруживается это только на первой же попытке обратиться к
+      таблице.
+    -->
+    <dependency>
+      <groupId>org.springframework.boot</groupId>
+      <artifactId>spring-boot-liquibase</artifactId>
+    </dependency>
+
+    <!--
+      Наблюдаемость (D62): стандартные HTTP-метрики actuator'а плюс счётчики
+      успешных операций домена из пакета `metrics`.
+
+      Версии нет — её задаёт BOM 4.1.1. Стартер в Boot 4 разделён на модули
+      (`spring-boot-starter-micrometer-metrics`, `spring-boot-health`,
+      `spring-boot-actuator-autoconfigure`) и тянет их транзитивно, а регистратор
+      по умолчанию — SimpleMeterRegistry: внешний сервис для сбора не нужен,
+      а значит и второе место, где что-то может молча перестать работать.
+
+      Эндпоинты actuator'а не входят в контракт main.tsp и живут на порту 8080
+      рядом с операциями; ограничение CORS (D61) на них не распространяется —
+      это сознательное решение, см. server/AGENTS.md.
+    -->
+    <dependency>
+      <groupId>org.springframework.boot</groupId>
+      <artifactId>spring-boot-starter-actuator</artifactId>
+    </dependency>
+
+    <dependency>
+      <groupId>org.springframework.boot</groupId>
+      <artifactId>spring-boot-starter-test</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <!--
+      `@ServiceConnection`: без него адрес контейнера пришлось бы подставлять
+      вручную через `@DynamicPropertySource`, а этот метод вызывается при сборке
+      контекста — раньше, чем контейнер стартовал.
+    -->
+    <dependency>
+      <groupId>org.springframework.boot</groupId>
+      <artifactId>spring-boot-testcontainers</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.testcontainers</groupId>
+      <artifactId>testcontainers-junit-jupiter</artifactId>
+      <scope>test</scope>
+    </dependency>
+    <dependency>
+      <groupId>org.testcontainers</groupId>
+      <artifactId>testcontainers-postgresql</artifactId>
+      <scope>test</scope>
+    </dependency>
+  </dependencies>
+
+  <build>
+    <plugins>
+      <plugin>
+        <groupId>org.springframework.boot</groupId>
+        <artifactId>spring-boot-maven-plugin</artifactId>
+      </plugin>
+
+      <!--
+        Генерация моделей API в `com.hexlet.calendar.api.model` (D9, D10).
+        Модели — единственное, что порождается генератором: контроллеры,
+        маппинг и JPA пишутся руками.
+      -->
+      <plugin>
+        <groupId>org.openapitools</groupId>
+        <artifactId>openapi-generator-maven-plugin</artifactId>
+        <version>${openapi.generator.version}</version>
+        <executions>
+          <execution>
+            <id>generate-models</id>
+            <phase>generate-sources</phase>
+            <goals>
+              <goal>generate</goal>
+            </goals>
+            <configuration>
+              <inputSpec>${contract.file}</inputSpec>
+              <!--
+                generatorName=spring, НЕ java: наблюдение прототипа (#83).
+                Генератор `java` — это КЛИЕНТСКИЕ модели под Gson: сгенерированное
+                дерево не собирается на classpath сервера (нет Gson) и импортирует
+                пакет `api.invoker`, который при generateSupportingFiles=false не
+                появляется вовсе. `spring` даёт Jackson-модели — тот же сериализатор,
+                что у контроллеров.
+              -->
+              <generatorName>spring</generatorName>
+              <!--
+                Только модели: контроллеры, маппинг и JPA пишутся руками (D9),
+                поэтому сгенерированные API-интерфейсы и клиент не нужны.
+                Флага `generateModelsOnly` не существует — «только модели»
+                собирается из этих трёх параметров.
+              -->
+              <generateApis>false</generateApis>
+              <generateSupportingFiles>false</generateSupportingFiles>
+              <generateModels>true</generateModels>
+              <generateApiTests>false</generateApiTests>
+              <generateModelTests>false</generateModelTests>
+              <generateApiDocumentation>false</generateApiDocumentation>
+              <generateModelDocumentation>false</generateModelDocumentation>
+              <modelPackage>com.hexlet.calendar.api.model</modelPackage>
+              <apiPackage>com.hexlet.calendar.api</apiPackage>
+              <invokerPackage>com.hexlet.calendar.api.invoker</invokerPackage>
+              <!--
+                Флаги генератора живут в configOptions: перечисленные выше
+                параметры плагина доходят до генератора как есть, а флаги
+                codegen'а — только отсюда. Проверено генерацией: вне
+                configOptions `useBeanValidation` молча игнорировался, и
+                модели приходили без @Size и @Pattern, то есть D40 не работал.
+              -->
+              <configOptions>
+                <useTags>true</useTags>
+                <!--
+                  io.swagger @Schema в моделях тянет отдельную зависимость
+                  swagger-annotations на classpath продакшена ради аннотаций,
+                  которые серверу не за что читать (OpenAPI наружу отдаёт
+                  закоммиченный контракт, не аннотации). В генераторе 7.x это
+                  не `swaggerAnnotations=false`, а `documentationProvider=none`
+                  — наблюдение прототипа (#83).
+                -->
+                <documentationProvider>none</documentationProvider>
+                <openApiNullable>false</openApiNullable>
+                <disallowAdditionalPropertiesIfNotPresent>false</disallowAdditionalPropertiesIfNotPresent>
+                <!--
+                  D40: `@Size`/`@Pattern`/`@Min` в моделях. Флаг называется
+                  `useBeanValidation`, а не `enableBeanValidation`, и передаётся
+                  явно: при `library=spring-http-interface` плагин ставит его
+                  в `false`, и D40 перестаёт работать молча.
+                -->
+                <useBeanValidation>true</useBeanValidation>
+                <!--
+                  D41: почта проверяется руками, и `guestEmail` добавляется
+                  в `fields[]` независимо от того, пришла ли аннотация из
+                  контракта. Флаг выключен: `@Email` из `format: email` иначе
+                  проверял бы правило дважды, а добавление поля в `fields[]`
+                  осталось бы ручным.
+                -->
+                <useEmail>false</useEmail>
+                <!-- Jakarta-аннотации приходят из `useSpringBoot4`. -->
+                <useSpringBoot4>true</useSpringBoot4>
+                <!--
+                  D29: `implicitOptionality: false` в main.tsp означает, что
+                  все поля тела обязательны. Флага `implicitOptionality` в
+                  генераторе нет, нужен `useOptional`, и он уже `false` —
+                  задано явно, чтобы не зависеть от умолчания.
+                -->
+                <useOptional>false</useOptional>
+              </configOptions>
+            </configuration>
+          </execution>
+        </executions>
+      </plugin>
+
+      <!--
+        Уровни тестов пирамиды (#102), прогоняются по порядку цены.
+
+        Уровень — это суффикс имени файла, а не аннотация: `*Unit` — уровень 1
+        (чистый JUnit, без контекста), `*Test` — уровень 2 (Spring-контекст,
+        хранилище подменено моками), `*IT` — уровень 3 (контекст + настоящий
+        Postgres в Testcontainers). Меток нет намеренно: забытая аннотация не
+        превратит тест в молча пропущенный, а неверный суффикс видно глазами.
+
+        Порядок держат не только маски, но и фазы: surefire гоняет уровни 1 и 2
+        в фазе `test` двумя execution'ами подряд (сначала дешёвый), failsafe —
+        уровень 3 в фазе `integration-test`. Упавший дешёвый уровень роняет
+        сборку до подъёма контейнера, и сразу видно: сломалось правило или база.
+      -->
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-surefire-plugin</artifactId>
+        <executions>
+          <!--
+            Дефолтный прогон выключен: он запустил бы всё подряд, мимо порядка
+            «сначала уровень 1, потом 2». Прогон целиком — два execution'а ниже.
+          -->
+          <execution>
+            <id>default-test</id>
+            <configuration>
+              <skip>true</skip>
+            </configuration>
+          </execution>
+          <execution>
+            <id>level-1</id>
+            <goals>
+              <goal>test</goal>
+            </goals>
+            <configuration>
+              <includes>
+                <include>**/*Unit.java</include>
+              </includes>
+            </configuration>
+          </execution>
+          <execution>
+            <id>level-2</id>
+            <goals>
+              <goal>test</goal>
+            </goals>
+            <configuration>
+              <includes>
+                <include>**/*Test.java</include>
+              </includes>
+            </configuration>
+          </execution>
+        </executions>
+      </plugin>
+
+      <!--
+        Failsafe по умолчанию берёт `**/IT*.java`, `**/*IT.java`, `**/*ITCase.java` —
+        то есть `*IT` уже попадает в прогон без настройки. `skipAfterFailureCount=1`:
+        упавший интеграционный тест роняет весь прогон уровня 3, не гоняя остальные
+        контейнерные тесты впустую.
+      -->
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-failsafe-plugin</artifactId>
+        <configuration>
+          <skipAfterFailureCount>1</skipAfterFailureCount>
+        </configuration>
+        <executions>
+          <execution>
+            <goals>
+              <goal>integration-test</goal>
+              <goal>verify</goal>
+            </goals>
+          </execution>
+        </executions>
+      </plugin>
+
+      <!--
+        Стиль кода (#104). Линтер живёт в `mvn verify`, а не в отдельной команде:
+        в `AGENTS.md` перед завершением уже написано `mvn verify`, и вторая
+        проверка создала бы второе место правды (та же логика, что в D51: джобов
+        два, а не три). Фаза `validate` — до компиляции, чтобы стиль не
+        обнаруживался после потраченной сборки.
+
+        Конфигурация лежит файлом `checkstyle.xml`, а не берётся из classpath
+        как `google_checks.xml`: конфиг из classpath нельзя ревьюить диффом.
+
+        `sourceDirectories` задан явно: по умолчанию плагин берёт
+        `project.compileSourceRoots`, а туда openapi-generator добавляет
+        `target/generated-sources/openapi`. Без этого в проверку попали бы
+        сгенерированные модели — чужой стиль и ни одного Javadoc.
+      -->
+      <plugin>
+        <groupId>org.apache.maven.plugins</groupId>
+        <artifactId>maven-checkstyle-plugin</artifactId>
+        <version>${checkstyle.plugin.version}</version>
+        <dependencies>
+          <dependency>
+            <groupId>com.puppycrawl.tools</groupId>
+            <artifactId>checkstyle</artifactId>
+            <version>${checkstyle.version}</version>
+          </dependency>
+        </dependencies>
+        <configuration>
+          <configLocation>checkstyle.xml</configLocation>
+          <sourceDirectories>
+            <sourceDirectory>src/main/java</sourceDirectory>
+          </sourceDirectories>
+          <includeTestSourceDirectory>true</includeTestSourceDirectory>
+          <consoleOutput>true</consoleOutput>
+        </configuration>
+        <executions>
+          <execution>
+            <id>check-style</id>
+            <phase>validate</phase>
+            <goals>
+              <goal>check</goal>
+            </goals>
+          </execution>
+        </executions>
+      </plugin>
+    </plugins>
+  </build>
+</project>
