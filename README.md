@@ -1,6 +1,6 @@
 # Календарь звонков
 
-[![hexlet-check](https://github.com/AleksSPb/ai-for-developers-project-386/actions/workflows/hexlet-check.yml/badge.svg)](https://github.com/AleksSPb/ai-for-developers-project-386/actions)
+[![hexlet-check](https://github.com/AleksSPb/ai-for-developers-project-387/actions/workflows/hexlet-check.yml/badge.svg)](https://github.com/AleksSPb/ai-for-developers-project-387/actions)
 
 Сервис записи на звонок. Гость выбирает дату и свободный слот, подтверждает
 запись именем и почтой, а потом находит её в списке записей. Один календарь,
@@ -68,8 +68,8 @@ Vitest и Testing Library.
 Клиент:
 
 ```bash
-git clone https://github.com/AleksSPb/ai-for-developers-project-386.git
-cd ai-for-developers-project-386
+git clone https://github.com/AleksSPb/ai-for-developers-project-387.git
+cd ai-for-developers-project-387
 cd vite-project
 npm install
 ```
