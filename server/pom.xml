@@ -26,7 +26,7 @@
 
   <groupId>com.hexlet.calendar</groupId>
   <artifactId>server</artifactId>
-  <version>0.0.2-SNAPSHOT</version>
+  <version>0.0.2</version>
   <name>calendar-server</name>
   <description>Сервер бронирования звонков</description>
 

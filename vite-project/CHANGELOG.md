@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.1.1](https://github.com/AleksSPb/ai-for-developers-project-387/compare/vite-project-v0.1.0...vite-project-v0.1.1) (2026-10-13)
+
+
+### Bug Fixes
+
+* **vite-project:** снимать Слот на экране успеха записи ([443771e](https://github.com/AleksSPb/ai-for-developers-project-387/commit/443771e7f08133a4d56fc5d2c94088b4291192f4))
+
 ## [0.1.0](https://github.com/AleksSPb/ai-for-developers-project-386/compare/vite-project-v0.0.1...vite-project-v0.1.0) (2026-10-12)
 
 
