@@ -40,12 +40,15 @@
    `vite-project/package.json` и в тегах release-please.
 3. Одна ветка — одна задача. Работа ведётся от свежего `main`, `main`
    не форкачится.
-4. Служебные ветки не переименовываются. Ветку
-   `release-please--branches--main--components--vite-project` создаёт и
-   удаляет release-please, на ней завязан релизный workflow. Пакетов два, значит
-   и служебных веток две: вторая — `…--components--server`.
+4. Служебные ветки не переименовываются. Их создаёт и удаляет release-please,
+   на них завязан релизный workflow. Пакетов два, а `separate-pull-requests` не
+   задан, поэтому релизный PR один на оба пакета и ветка у него общая —
+   `release-please--branches--main`, без компонента в имени. Ветка с
+   компонентом (`release-please--branches--main--components--server`)
+   появляется отдельно и только под snapshot-PR сервера: стратегия `maven`
+   поднимает pom до следующего `-SNAPSHOT` отдельным PR.
 
 ## Существующие ветки
 
-В репозитории только `main` и служебная ветка release-please — истории
+В репозитории только `main` и служебные ветки release-please — истории
 именования, к которой пришлось бы подстраиваться, нет.

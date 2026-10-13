@@ -17,8 +17,14 @@ on:
   workflow_dispatch:
 
 # Два быстрых пуша подряд не должны запускать релиз параллельно: второй
-# прогон упал бы на «another release in progress». Отменять нечего — релиз
-# должен довестись до конца.
+# прогон либо молча уйдёт («There are untagged, merged release PRs outstanding
+# - aborting»), либо напорется на «Duplicate release tag». Отменять нечего —
+# релиз должен довестись до конца.
+#
+# Оговорка к workflow_dispatch: GitHub отменяет ранее ОЖИДАЮЩИЙ прогон в группе
+# независимо от cancel-in-progress, выживает только новейший. Ручной запуск,
+# случившийся при живом прогоне пуша, молча потеряется — запускать его надо после
+# завершения пуша.
 concurrency:
   group: release-please-${{ github.ref }}
   cancel-in-progress: false
