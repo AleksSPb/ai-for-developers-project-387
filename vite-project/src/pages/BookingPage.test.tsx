@@ -395,6 +395,53 @@ describe('подтверждение записи', () => {
     })
   })
 
+  it('снимает Слот на экране успеха: занят и больше не выбран', async () => {
+    const created = {
+      id: 'new',
+      eventTypeId: 'consultation',
+      timeRange: { start: `${TODAY}T07:00:00.000Z`, end: `${TODAY}T08:00:00.000Z` },
+      guestName: 'Demo User',
+      guestEmail: 'demo@example.com',
+      createdAt: NOW.toISOString(),
+    }
+    // Список после записи отдаёт созданную Бронь: без перечитывания Слот остался
+    // бы «Свободным», и проверялось бы не то состояние, что гость видит.
+    const state = { posted: false }
+
+    server.use(
+      http.post('/bookings', () => {
+        state.posted = true
+        return HttpResponse.json(created, { status: 201 })
+      }),
+      http.get('/bookings', () =>
+        HttpResponse.json(state.posted ? [created] : [], { status: 200 }),
+      ),
+    )
+
+    // Отдельный рендер, а не `renderPage`: тот подставляет свой пустой список
+    // последним и заглушка успеха осталась бы незамеченной.
+    render(storageWith())
+    await awaitSources()
+    await reachConfirmation()
+
+    fireEvent.change(screen.getByLabelText('Имя'), { target: { value: 'Demo User' } })
+    fireEvent.change(screen.getByLabelText('Email'), { target: { value: 'demo@example.com' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Подтвердить запись' }))
+
+    expect(await screen.findByText('Бронь подтверждена. До встречи!')).toBeTruthy()
+
+    // Занятость честная: список перечитан, и Слот занят этой же Бронью.
+    await waitFor(() => expect(screen.getByText('Занято')).toBeTruthy())
+
+    // Но подсвеченным выбранным он быть не может: «выбран» и «занят» — два
+    // взаимоисключающих утверждения об одном Слоте, и второе здесь истинно.
+    expect(slotButton('10:00 – 11:00').getAttribute('aria-pressed')).toBe('false')
+
+    // «Продолжить» тоже: клик по ней открыл бы форму для занятого Слота, и
+    // отправка вернула бы тот же 409, что и гонка.
+    expect(screen.getByRole('button', { name: 'Продолжить' })).toHaveProperty('disabled', true)
+  })
+
   it('возвращает к первому шагу с кнопки «Забронировать ещё»', async () => {
     server.use(
       http.post('/bookings', () =>

@@ -8,7 +8,7 @@ import type { Slot } from '../domain/slots'
 
 interface BookingSuccessProps {
   slot: Slot
-  /** Возврат к первому шагу: день сохраняется, Слот сбрасывается. */
+  /** Возврат к первому шагу: день сохраняется, Слот уже снят успехом. */
   onAgain: () => void
 }
 

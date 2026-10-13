@@ -238,6 +238,11 @@ const BookingPage = ({ eventTypeId }: BookingPageProps) => {
               if (selectedSlot !== null) {
                 setConfirmedSlot(selectedSlot)
               }
+              // Слот снимается вместе с успехом, а не по кнопке «Забронировать
+              // ещё»: он уже занят этой же Бронью, и подсветка выбора вместе с
+              // активной «Продолжить» утверждали бы об одном Слоте два
+              // взаимоисключающих — выбран и занят.
+              setSelectedSlot(null)
               setRefusal(null)
               setStep('done')
             }}
@@ -248,9 +253,8 @@ const BookingPage = ({ eventTypeId }: BookingPageProps) => {
               <BookingSuccess
                 slot={confirmedSlot ?? selectedSlot}
                 onAgain={() => {
-                  // Слот снимается вместе с успехом: он уже занят этой же Бронью,
-                  // и «Продолжить» увело бы Гостя обратно на занятое время.
-                  setSelectedSlot(null)
+                  // День сохраняется: гость записывается на тот же день. Слот к
+                  // этому моменту уже снят успехом, и повторно снимать нечего.
                   setRefusal(null)
                   setStep('choose')
                 }}
