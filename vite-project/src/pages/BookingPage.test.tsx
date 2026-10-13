@@ -442,6 +442,49 @@ describe('подтверждение записи', () => {
     expect(screen.getByRole('button', { name: 'Продолжить' })).toHaveProperty('disabled', true)
   })
 
+  it('сохраняет Слот, выбранный уже на экране успеха', async () => {
+    const created = {
+      id: 'new',
+      eventTypeId: 'consultation',
+      timeRange: { start: `${TODAY}T07:00:00.000Z`, end: `${TODAY}T08:00:00.000Z` },
+      guestName: 'Demo User',
+      guestEmail: 'demo@example.com',
+      createdAt: NOW.toISOString(),
+    }
+    const state = { posted: false }
+
+    server.use(
+      http.post('/bookings', () => {
+        state.posted = true
+        return HttpResponse.json(created, { status: 201 })
+      }),
+      http.get('/bookings', () =>
+        HttpResponse.json(state.posted ? [created] : [], { status: 200 }),
+      ),
+    )
+
+    render(storageWith())
+    await awaitSources()
+    await reachConfirmation()
+
+    fireEvent.change(screen.getByLabelText('Имя'), { target: { value: 'Demo User' } })
+    fireEvent.change(screen.getByLabelText('Email'), { target: { value: 'demo@example.com' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Подтвердить запись' }))
+
+    await screen.findByText('Бронь подтверждена. До встречи!')
+
+    // Экран успеха стоит рядом со списком Слотов, и гость вправе выбрать в нём
+    // другое время ещё до кнопки — до возврата к первому шагу он не вернулся.
+    fireEvent.click(slotButton('11:00 – 12:00'))
+    fireEvent.click(screen.getByRole('button', { name: 'Забронировать ещё' }))
+
+    // Выбор сделан уже после записи и принадлежит гостю, а не остался от прежнего
+    // Слота: терять его на пути к первому шагу незачем.
+    expect(screen.getByText('Статус слотов')).toBeTruthy()
+    expect(slotButton('11:00 – 12:00').getAttribute('aria-pressed')).toBe('true')
+    expect(screen.getByRole('button', { name: 'Продолжить' })).toHaveProperty('disabled', false)
+  })
+
   it('возвращает к первому шагу с кнопки «Забронировать ещё»', async () => {
     server.use(
       http.post('/bookings', () =>
