@@ -179,6 +179,31 @@ class RulesWithoutDbUnit {
   }
 
   @Test
+  @DisplayName("Слот, кончающийся ровно в конце окна, записывается — это последний Слот (#7)")
+  void slotEndingAtWindowEndIsBookable() {
+    Instant windowStart = NOW.plusSeconds(3600);
+    Instant windowEnd = windowStart.plusSeconds(9 * 3600);
+
+    when(types.findById("consult"))
+        .thenReturn(Optional.of(new EventType("consult", "Консультация", "описание", 60)));
+    // Окно в 9 часов при Типе в 60 минут клиент делит на 9 Слотов, и девятый
+    // кончается ровно в конце окна. Рамка «конец окна строго позже конца слота»
+    // отказывала ему 404-ом: последним Слотом каждого окна записаться было нельзя,
+    // хотя клиент его показывал и отправлял границы без правки.
+    when(windows.findByEndDtAfterOrderByStartDtAsc(NOW))
+        .thenReturn(List.of(new Window(windowStart, windowEnd)));
+    when(bookings.findByEventTypeIdAndStartDtAndGuestEmail(any(), any(), any()))
+        .thenReturn(Optional.empty());
+    when(bookings.findOverlapping(any(), any(), any())).thenReturn(List.of());
+
+    var model =
+        service.create(bookingRequest("consult", windowEnd.minusSeconds(3600), windowEnd));
+
+    assertThat(model.getTimeRange().getEnd().toInstant()).isEqualTo(windowEnd);
+    verify(entityManager).persist(any());
+  }
+
+  @Test
   @DisplayName("повтор по ключу (тип, начало, почта) — старая Бронь, имя не обновляется (D37)")
   void repeatReturnsOldBooking() {
     Booking old =
