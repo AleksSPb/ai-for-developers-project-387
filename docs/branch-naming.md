@@ -40,9 +40,11 @@
    `vite-project/package.json` и в тегах release-please.
 3. Одна ветка — одна задача. Работа ведётся от свежего `main`, `main`
    не форкачится.
-4. Служебные ветки не переименовываются. Ветку
-   `release-please--branches--main--components--vite-project` создаёт и
-   удаляет release-please, на ней завязан релизный workflow.
+4. Служебные ветки не переименовываются. Их создаёт и удаляет release-please,
+   на них завязан релизный workflow. Ветка одна и без компонента в имени:
+   `release-please--branches--main`. Пакетов два, а `separate-pull-requests` не
+   задан, поэтому Merge-плагин сливает всех кандидатов — включая snapshot —
+   в один PR и подставляет имя ветки жёстко, без компонента.
 
 ## Существующие ветки
 
