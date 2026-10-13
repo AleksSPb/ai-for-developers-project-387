@@ -1,0 +1,49 @@
+name: opencode-review
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+
+# Новый пуш в тот же PR отменяет предыдущий прогон: коммит один,
+# а квоту платить за каждый пуш незачем.
+concurrency:
+  group: opencode-review-${{ github.event.pull_request.number }}
+  cancel-in-progress: true
+
+jobs:
+  review:
+    # Форк: секреты в раннер не попадают, а токен автоматически становится
+    # read-only — джоб упал бы на 403. Черновик: ревьють ещё нечего.
+    if: >-
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      github.event.pull_request.draft == false
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      # use_github_token пропускает обмен OIDC, поэтому id-token не нужен.
+      # write на issues и pull-requests — opencode пишет комментарий с ревью.
+      contents: read
+      pull-requests: write
+      issues: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 1
+          persist-credentials: false
+
+      - name: Run OpenCode
+        # Экшен получает ключ и права на запись, поэтому пин на SHA, а не @latest.
+        # SHA взят из прогона 38401499078 — версия, которая отработала успешно.
+        uses: anomalyco/opencode/github@77fc88c8ade8e5a620ebbe1197f3a572d29ae91a
+        env:
+          OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          model: opencode/space-bunny-free
+          use_github_token: true
+          prompt: |
+            Review this pull request:
+            - Check for code quality issues
+            - Look for potential bugs
+            - Suggest improvements
