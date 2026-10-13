@@ -59,6 +59,11 @@
     "vitest": "^5.0.3",
     "yaml": "^2.9.1"
   },
+  "overrides": {
+    "@scalar/json-magic": {
+      "undici": "^7.29.1"
+    }
+  },
   "msw": {
     "workerDirectory": [
       "public"
