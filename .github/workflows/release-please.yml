@@ -1,21 +1,27 @@
 name: release-please
 
-# Запускается вручную, когда есть желание зарелизить: Actions → release-please → Run workflow.
+# Релиз создаётся на каждом мерже в main: пуш запускает workflow,
+# release-please открывает релизный PR, а на мерж этого PR ставит тег и
+# GitHub Release. Руками ничего запускать не нужно. workflow_dispatch оставлен
+# для перепрогона, если первый упал.
+#
 # Корневого package.json нет намеренно — версия живёт в vite-project/package.json.
 #
-# Один релиз — два ручных прогона:
-#   1. запуск → создаёт/обновляет release-PR;
-#   2. после мержа release-PR → запуск снова → createPullRequests() прерывается
-#      («untagged, merged release PRs outstanding»), а createReleases() находит
-#      смерженный PR с меткой autorelease: pending и ставит тег + GitHub Release.
-# Автотриггера на push в main нет, поэтому без второго запуска тег не появится.
-#
-# В release-please-config.json сейчас стоит ВРЕМЕННЫЙ `last-release-sha` на коммит
-# `v0.0.1`: он переносит уже выпущенный тег `v0.0.1` на схему с компонентом в имени
-# (`vite-project-v…`, `server-v…`), иначе release-please не найдёт прошлый релиз.
-# Снять ключ после того, как первый релизный PR смержен и теги поставлены.
+# Токен — GITHUB_TOKEN, поэтому события от созданного ботом релизного PR не
+# порождают прогонов: ci.yml и hexlet-check на нём не поедут. Если это нужно —
+# заменить на PAT-секрет.
 on:
+  push:
+    branches:
+      - main
   workflow_dispatch:
+
+# Два быстрых пуша подряд не должны запускать релиз параллельно: второй
+# прогон упал бы на «another release in progress». Отменять нечего — релиз
+# должен довестись до конца.
+concurrency:
+  group: release-please-${{ github.ref }}
+  cancel-in-progress: false
 
 permissions:
   contents: write

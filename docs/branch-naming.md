@@ -42,7 +42,8 @@
    не форкачится.
 4. Служебные ветки не переименовываются. Ветку
    `release-please--branches--main--components--vite-project` создаёт и
-   удаляет release-please, на ней завязан релизный workflow.
+   удаляет release-please, на ней завязан релизный workflow. Пакетов два, значит
+   и служебных веток две: вторая — `…--components--server`.
 
 ## Существующие ветки
 
