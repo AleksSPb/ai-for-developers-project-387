@@ -116,9 +116,14 @@ public class BookingService {
     // Шаг 4 — окно: ОДНО, целиком содержащее интервал (D35). Длинный интервал
     // даёт 404, а не 409; «409 вне окна» в этой формулировке недостижим.
     // Момент для фильтра пришёл из Clock, запрос его не получает из базы (D21).
+    //
+    // Границы полуоткрытые, как в остальном проекте: слот [s, e) помещается в
+    // окно [ws, we) при s >= ws и e <= we. Строгое `we > e` отказывало Слоту,
+    // который кончается ровно в конце окна, — последнему Слоту каждого окна,
+    // а клиент такие Слоты показывает и отправляет их границы без правки (#7).
     boolean insideWindow =
         windowRepository.findByEndDtAfterOrderByStartDtAsc(now).stream()
-            .anyMatch(w -> !w.getStartDt().isAfter(start) && w.getEndDt().isAfter(end));
+            .anyMatch(w -> !w.getStartDt().isAfter(start) && !end.isAfter(w.getEndDt()));
     if (!insideWindow) {
       throw new Refusal(Refusal.Kind.SLOT_NOT_FOUND);
     }
