@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.1.2](https://github.com/AleksSPb/ai-for-developers-project-387/compare/vite-project-v0.1.1...vite-project-v0.1.2) (2026-10-13)
+
+
+### Bug Fixes
+
+* **vite-project:** переопределить версию undici для @scalar/json-magic ([cdac035](https://github.com/AleksSPb/ai-for-developers-project-387/commit/cdac035ceda88fa6b63525028874f926af338a40))
+* **vite-project:** переопределить версию undici для @scalar/json-magic ([f87fb22](https://github.com/AleksSPb/ai-for-developers-project-387/commit/f87fb220559f62b5e55cd3fc0bd00062e592153c))
+
 ## [0.1.1](https://github.com/AleksSPb/ai-for-developers-project-387/compare/vite-project-v0.1.0...vite-project-v0.1.1) (2026-10-13)
 
 
