@@ -1,0 +1,79 @@
+name: Scheduled OpenCode Task
+
+on:
+  # Запуск по расписанию и разово из Actions. Расписание — только из ветки
+  # по умолчанию, то есть из main; разовый запуск доступен из любой ветки,
+  # где файл есть, и по нему удобно проверять правку, не дожидаясь четверга.
+  schedule:
+    - cron: "0 3 * * 4" # Every Thursday at 3am UTC
+  workflow_dispatch:
+
+jobs:
+  opencode:
+    runs-on: ubuntu-latest
+    # Зависание агента не должно жечь шесть часов раннера: дефолт у
+    # расписаний — 360 минут.
+    timeout-minutes: 20
+    permissions:
+      # Права соответствуют промпту: агент наблюдает и заводит задачи,
+      # поэтому write нужен ровно один — issues. contents и pull-requests
+      # остаются read: при грязном дереве экшен пошёл бы пушить ветку
+      # opencode/schedule-* и заводить PR, но промпт правки запрещает, и
+      # при попытке агент получает 403 вместо молчаливого PR.
+      # use_github_token пропускает обмен OIDC, поэтому id-token не нужен.
+      contents: read
+      issues: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+        with:
+          fetch-depth: 1
+          persist-credentials: false
+
+      # `configureGit()` в CLI пропускается при `use_github_token: true`, а
+      # `persist-credentials: false` не оставляет кредов — идентичность и
+      # push-токен надо задать самому, иначе первая же правка файла упадёт
+      # на `git commit` с кодом 128.
+      - name: Configure git
+        run: |
+          git config --global user.name  "opencode-agent[bot]"
+          git config --global user.email "opencode-agent[bot]@users.noreply.github.com"
+          git config --local http.https://github.com/.extraheader \
+            "AUTHORIZATION: basic $(printf 'x-access-token:%s' "$GITHUB_TOKEN" | base64 -w0)"
+
+      - name: Run OpenCode
+        # Пин на SHA, а не на тег: джоб получает секрет и право заводить
+        # задачи. SHA взят из прогона 38401499078 — та же версия, что и в
+        # opencode-review.yml.
+        uses: anomalyco/opencode/github@77fc88c8ade8e5a620ebbe1197f3a572d29ae91a
+        env:
+          OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}
+          # Без токена и use_github_token action не авторизуется в GitHub:
+          # права джоба выданы, но не переданы. Обмен OIDC при этом не идёт,
+          # поэтому id-token в permissions лишний.
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          model: opencode/space-bunny-free
+          use_github_token: true
+          # Прогон по расписанию никто не вызывал, и делиться его
+          # транскриптом с публичным opencode.ai незачем. Без этого флага
+          # неявно включается шэринг: репозиторий публичный, а share при
+          # unset трактуется как «показать».
+          share: false
+          prompt: |
+            Обойди кодовую базу, найди комментарии TODO и составь по ним
+            сводку. Если найдётся что-то, что стоит исправить, заведи под
+            это задачу.
+
+            Задачи заводи через `gh` — так же, как это делает человек в
+            этом репозитории. Соглашения по оформлению и меткам описаны в
+            AGENTS.md и в docs/agents/, читай их, прежде чем создавать
+            задачу: своя структура задачи в обход соглашений нам не
+            нужна.
+
+            Прежде чем завести задачу, посмотри открытые: если такая уже
+            есть, не плоди вторую, а допиши в существующую комментарий,
+            что нашлось новое.
+
+            Правок в код не вноси: этот прогон только наблюдает и заводит
+            задачи. Файлы не меняй.
