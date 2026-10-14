@@ -11,8 +11,16 @@ on:
 jobs:
   opencode:
     runs-on: ubuntu-latest
+    # Зависание агента не должно жечь шесть часов раннера: дефолт у
+    # расписаний — 360 минут.
+    timeout-minutes: 20
     permissions:
       # use_github_token пропускает обмен OIDC, поэтому id-token не нужен.
+      #
+      # Права на запись — не «на всякий случай». При грязном рабочем дереве
+      # агент пушит ветку opencode/schedule-* и заводит PR от неё, а задачи
+      # заводит через issues: write. Срезать их до read — значит тихо сломать
+      # эту ветку кода.
       contents: write
       pull-requests: write
       issues: write
@@ -20,7 +28,27 @@ jobs:
       - name: Checkout repository
         uses: actions/checkout@v6
         with:
+          fetch-depth: 1
           persist-credentials: false
+
+      # Настройка git обязательна и по причине, которую видно только в
+      # исходниках экшена: `configureGit()` — единственное место, где
+      # ставятся user.name/user.email и push-credential
+      # http.https://github.com/.extraheader — вызывается под условием
+      # `if (!useGithubToken)`. С `use_github_token: true` он пропускается
+      # целиком, а `persist-credentials: false` оставил .git/config пустым.
+      #
+      # Пока агент только заводит задачи, это не видно: git не трогается.
+      # Стоит ему что-нибудь изменить — `git commit` упадёт с кодом 128
+      # (*Author identity unknown*), потому что на раннере нет глобальной
+      # git-идентичности, а push не авторизуется: токен из env уходит в
+      # Octokit/graphql, а не в git-транспорт.
+      - name: Configure git
+        run: |
+          git config --global user.name  "opencode-agent[bot]"
+          git config --global user.email "opencode-agent[bot]@users.noreply.github.com"
+          git config --local http.https://github.com/.extraheader \
+            "AUTHORIZATION: basic $(printf 'x-access-token:%s' "$GITHUB_TOKEN" | base64 -w0)"
 
       - name: Run OpenCode
         # Пин на SHA, а не на тег: джоб выдаёт права на запись и получает
@@ -36,6 +64,25 @@ jobs:
         with:
           model: opencode/space-bunny-free
           use_github_token: true
+          # Прогон по расписанию никто не вызывал, и делиться его
+          # транскриптом с публичным opencode.ai незачем. Без этого флага
+          # неявно включается шэринг: репозиторий публичный, а share при
+          # unset трактуется как «показать».
+          share: false
           prompt: |
-            Review the codebase for any TODO comments and create a summary.
-            If you find issues worth addressing, open an issue to track them.
+            Обойди кодовую базу, найди комментарии TODO и составь по ним
+            сводку. Если найдётся что-то, что стоит исправить, заведи под
+            это задачу.
+
+            Задачи заводи через `gh` — так же, как это делает человек в
+            этом репозитории. Соглашения по оформлению и меткам описаны в
+            AGENTS.md и в docs/agents/, читай их, прежде чем создавать
+            задачу: своя структура задачи в обход соглашений нам не
+            нужна.
+
+            Прежде чем завести задачу, посмотри открытые: если такая уже
+            есть, не плоди вторую, а допиши в существующую комментарий,
+            что нашлось новое.
+
+            Правок в код не вноси: этот прогон только наблюдает и заводит
+            задачи. Файлы не меняй.
