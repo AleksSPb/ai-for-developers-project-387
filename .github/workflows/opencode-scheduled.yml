@@ -15,14 +15,13 @@ jobs:
     # расписаний — 360 минут.
     timeout-minutes: 20
     permissions:
+      # Права соответствуют промпту: агент наблюдает и заводит задачи,
+      # поэтому write нужен ровно один — issues. contents и pull-requests
+      # остаются read: при грязном дереве экшен пошёл бы пушить ветку
+      # opencode/schedule-* и заводить PR, но промпт правки запрещает, и
+      # при попытке агент получает 403 вместо молчаливого PR.
       # use_github_token пропускает обмен OIDC, поэтому id-token не нужен.
-      #
-      # Права на запись — не «на всякий случай». При грязном рабочем дереве
-      # агент пушит ветку opencode/schedule-* и заводит PR от неё, а задачи
-      # заводит через issues: write. Срезать их до read — значит тихо сломать
-      # эту ветку кода.
-      contents: write
-      pull-requests: write
+      contents: read
       issues: write
     steps:
       - name: Checkout repository
@@ -31,18 +30,10 @@ jobs:
           fetch-depth: 1
           persist-credentials: false
 
-      # Настройка git обязательна и по причине, которую видно только в
-      # исходниках экшена: `configureGit()` — единственное место, где
-      # ставятся user.name/user.email и push-credential
-      # http.https://github.com/.extraheader — вызывается под условием
-      # `if (!useGithubToken)`. С `use_github_token: true` он пропускается
-      # целиком, а `persist-credentials: false` оставил .git/config пустым.
-      #
-      # Пока агент только заводит задачи, это не видно: git не трогается.
-      # Стоит ему что-нибудь изменить — `git commit` упадёт с кодом 128
-      # (*Author identity unknown*), потому что на раннере нет глобальной
-      # git-идентичности, а push не авторизуется: токен из env уходит в
-      # Octokit/graphql, а не в git-транспорт.
+      # `configureGit()` в CLI пропускается при `use_github_token: true`, а
+      # `persist-credentials: false` не оставляет кредов — идентичность и
+      # push-токен надо задать самому, иначе первая же правка файла упадёт
+      # на `git commit` с кодом 128.
       - name: Configure git
         run: |
           git config --global user.name  "opencode-agent[bot]"
@@ -51,8 +42,8 @@ jobs:
             "AUTHORIZATION: basic $(printf 'x-access-token:%s' "$GITHUB_TOKEN" | base64 -w0)"
 
       - name: Run OpenCode
-        # Пин на SHA, а не на тег: джоб выдаёт права на запись и получает
-        # секрет. SHA взят из прогона 38401499078 — та же версия, что и в
+        # Пин на SHA, а не на тег: джоб получает секрет и право заводить
+        # задачи. SHA взят из прогона 38401499078 — та же версия, что и в
         # opencode-review.yml.
         uses: anomalyco/opencode/github@77fc88c8ade8e5a620ebbe1197f3a572d29ae91a
         env:
