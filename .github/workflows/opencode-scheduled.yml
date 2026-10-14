@@ -1,0 +1,41 @@
+name: Scheduled OpenCode Task
+
+on:
+  # Запуск по расписанию и разово из Actions. Расписание — только из ветки
+  # по умолчанию, то есть из main; разовый запуск доступен из любой ветки,
+  # где файл есть, и по нему удобно проверять правку, не дожидаясь четверга.
+  schedule:
+    - cron: "0 3 * * 4" # Every Thursday at 3am UTC
+  workflow_dispatch:
+
+jobs:
+  opencode:
+    runs-on: ubuntu-latest
+    permissions:
+      # use_github_token пропускает обмен OIDC, поэтому id-token не нужен.
+      contents: write
+      pull-requests: write
+      issues: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+
+      - name: Run OpenCode
+        # Пин на SHA, а не на тег: джоб выдаёт права на запись и получает
+        # секрет. SHA взят из прогона 38401499078 — та же версия, что и в
+        # opencode-review.yml.
+        uses: anomalyco/opencode/github@77fc88c8ade8e5a620ebbe1197f3a572d29ae91a
+        env:
+          OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}
+          # Без токена и use_github_token action не авторизуется в GitHub:
+          # права джоба выданы, но не переданы. Обмен OIDC при этом не идёт,
+          # поэтому id-token в permissions лишний.
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          model: opencode/space-bunny-free
+          use_github_token: true
+          prompt: |
+            Review the codebase for any TODO comments and create a summary.
+            If you find issues worth addressing, open an issue to track them.
