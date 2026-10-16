@@ -8,10 +8,12 @@ jobs:
   triage:
     runs-on: ubuntu-latest
     permissions:
-      id-token: write
-      contents: write
-      pull-requests: write
+      # Только комментарий к задаче: issues на запись, остальное на чтение.
+      # contents: write и pull-requests: write убраны намеренно — триаж не
+      # коммитит и не открывает PR, а без прав на запись не может этого
+      # сделать даже при ошибке в промпте.
       issues: write
+      contents: read
     steps:
       - name: Check account age
         id: check
@@ -44,3 +46,7 @@ jobs:
             - Provide documentation links
             - Add error handling guidance for code examples
             Otherwise, do not comment.
+
+            Your only permitted action is one comment on this issue.
+            Never commit, push, create a branch, or open a pull request,
+            even if you are convinced the fix is obvious.
