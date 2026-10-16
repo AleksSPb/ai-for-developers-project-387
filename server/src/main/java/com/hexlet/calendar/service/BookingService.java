@@ -194,4 +194,39 @@ public class BookingService {
         .map(bookingMapper::toModel)
         .toList();
   }
+
+  /**
+   * Отменить Бронь.
+   *
+   * <p>Правил здесь нет, и новый {@code Refusal.Kind} не понадобился: контракт
+   * обещает {@code 204} всегда, а {@code 404} означал бы, что сервер проверяет
+   * наличие строки. Проверять нечего — {@code deleteById} на отсутствующей строке
+   * молчит сам, и это ровно тот ответ, который обещан контрактом.
+   *
+   * <p>Идентификатор приходит строкой, а ключ — {@code UUID}. Мусорный
+   * идентификатор означает «такой Брони нет», а не «500»: обе ветви молчат, и
+   * обе честны — строки с таким ключом не существует.
+   */
+  @Transactional
+  public void cancel(String id) {
+    UUID found = asUuid(id);
+
+    if (found != null) {
+      bookingRepository.deleteById(found);
+    }
+  }
+
+  /**
+   * Идентификатор Брони в ключ, а негодный — в {@code null}.
+   *
+   * <p>Отдельный метод, а не проверка в теле {@link #cancel}: разбор строки в
+   * ключ — не правило записи и не должно выглядеть как часть отказа.
+   */
+  private static UUID asUuid(String id) {
+    try {
+      return UUID.fromString(id);
+    } catch (IllegalArgumentException unparsable) {
+      return null;
+    }
+  }
 }

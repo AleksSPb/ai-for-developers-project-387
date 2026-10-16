@@ -1,7 +1,7 @@
 import { createContext } from 'react'
 import type { Booking } from '../domain/booking'
 import type { Slot } from '../domain/slots'
-import type { CreateOutcome } from './bookingRefusal'
+import type { CancelOutcome, CreateOutcome } from './bookingRefusal'
 import type { BookingsState } from './useBookings'
 
 export interface AppContextValue {
@@ -23,6 +23,13 @@ export interface AppContextValue {
     eventTypeId: string,
     guest: { name: string; email: string },
   ) => Promise<CreateOutcome>
+  /**
+   * Отменить Бронь по идентификатору.
+   *
+   * Почты здесь нет намеренно: сверку почты делает форма, а сервер её всё равно
+   * не проверяет (ADR-0004).
+   */
+  cancelBooking: (id: string) => Promise<CancelOutcome>
   /**
    * Повторить чтение всех источников — по кнопке гостя.
    *

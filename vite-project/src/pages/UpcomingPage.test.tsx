@@ -5,6 +5,7 @@ import { MemoryRouter } from 'react-router'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import { toApiBooking } from '../api/bookings'
+import { CANCEL_FAILED_TEXT } from '../app/bookingRefusal'
 import type { Booking } from '../domain/booking'
 import { server } from '../test/server'
 import { AppProvider } from '../app/AppProvider'
@@ -203,5 +204,111 @@ describe('список Броней', () => {
       'Слот: 8 октября 2026 г., 08:30 – 09:00',
       'Слот: 8 октября 2026 г., 07:00 – 07:30',
     ])
+  })
+})
+
+/**
+ * Отмена Брони.
+ *
+ * Отмена устроена как запись наоборот: список перечитывается, а не дополняется на
+ * клиенте, поэтому проверяется ровно то, что делает `DELETE`, — вычищается ли
+ * запись. Заглушка ниже хранит список и убирает из него Бронь по идентификатору,
+ * иначе успех был бы виден всегда, даже если бы запрос ничего не удалял.
+ */
+describe('отмена Брони', () => {
+  /**
+   * Список, из которого отмена действительно вычищает запись.
+   *
+   * Счётчик отправленных `DELETE` — тоже часть заглушки: без него «запроса не
+   * было» и «запрос был, но ничего не удалил» выглядели бы на экране одинаково.
+   */
+  const renderCancelable = (bookings: Booking[]) => {
+    const store = { bookings, deletes: 0 }
+
+    server.use(
+      http.get('/bookings', () =>
+        HttpResponse.json(store.bookings.map(toApiBooking), { status: 200 }),
+      ),
+      http.delete('/bookings/:id', ({ params }) => {
+        store.deletes += 1
+        store.bookings = store.bookings.filter((item) => item.id !== params.id)
+
+        return new HttpResponse(null, { status: 204 })
+      }),
+    )
+
+    render(
+      <MantineProvider>
+        <AppProvider>
+          <MemoryRouter>
+            <UpcomingPage />
+          </MemoryRouter>
+        </AppProvider>
+      </MantineProvider>,
+    )
+
+    return store
+  }
+
+  /** Открыть модалку отмены и ввести почту. */
+  const cancelWithEmail = async (email: string) => {
+    fireEvent.click(screen.getAllByText('Отменить бронь')[0])
+    fireEvent.change(await screen.findByLabelText('Почта Гостя'), { target: { value: email } })
+    fireEvent.click(screen.getByRole('button', { name: 'Отменить' }))
+  }
+
+  it('по почте брони убирает Бронь из списка', async () => {
+    const store = renderCancelable([booking()])
+    await ready()
+
+    await cancelWithEmail('demo@example.com')
+
+    await waitFor(() => {
+      expect(screen.queryByText('Слот: 8 октября 2026 г., 10:00 – 10:30')).toBeNull()
+    })
+    expect(store.deletes).toBe(1)
+    expect(await screen.findByText('Записей пока нет')).toBeTruthy()
+  })
+
+  it('при несовпадении почты оставляет модалку и Бронь на месте', async () => {
+    const store = renderCancelable([booking()])
+    await ready()
+
+    await cancelWithEmail('чья-то@example.com')
+
+    // Сравнение живёт в браузере: при заведомо чужой почте запрос не отправляется
+    // вовсе, а ошибка стоит под полем, и модалка остаётся открытой.
+    expect(store.deletes).toBe(0)
+    expect(screen.getByLabelText('Почта Гостя')).toBeTruthy()
+    expect(screen.getByText('Почта не совпадает с почтой брони')).toBeTruthy()
+    expect(screen.getByText('Слот: 8 октября 2026 г., 10:00 – 10:30')).toBeTruthy()
+  })
+
+  it('при отказе сервера оставляет модалку открытой', async () => {
+    server.use(
+      http.delete('/bookings/:id', () =>
+        HttpResponse.json(
+          { code: 'service_unavailable', message: 'Сервис временно недоступен' },
+          { status: 503 },
+        ),
+      ),
+    )
+    renderPage([booking()])
+    await ready()
+
+    await cancelWithEmail('demo@example.com')
+
+    // Модалка остаётся: отмена не состоялась, и закрыть её значило бы выбросить
+    // то, что гость напечатал.
+    expect(await screen.findByText(CANCEL_FAILED_TEXT)).toBeTruthy()
+    expect(screen.getByLabelText('Почта Гостя')).toBeTruthy()
+    expect(screen.getByText('Слот: 8 октября 2026 г., 10:00 – 10:30')).toBeTruthy()
+  })
+
+  it('у прошедшей Брони кнопки отмены нет', async () => {
+    renderPage([pastBooking()])
+    await ready()
+
+    expect(screen.queryByText('Отменить бронь')).toBeNull()
   })
 })

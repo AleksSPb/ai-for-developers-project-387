@@ -10,6 +10,10 @@ import { baseUrl } from './config'
  *
  * Возвращаемое значение приведено к `T`, потому что orval описывает мутатор
  * обобщённым параметром и не знает, что внутри `{ status, data, headers }`.
+ *
+ * Тело читается текстом, а не `json()`: у `204` тела нет вовсе, и разбор пустого
+ * ответа обрушил бы запрос, который сервер отработал. Пустое тело — это `null`,
+ * ровно тем же, чем оно было бы, если бы сервер прислал JSON `null`.
  */
 export const customInstance = async <T>(
   path: string,
@@ -37,9 +41,11 @@ export const customInstance = async <T>(
     body: options.body,
   })
 
+  const text = await response.text()
+
   return {
     status: response.status,
-    data: (await response.json()) as unknown,
+    data: (text.length === 0 ? null : JSON.parse(text)) as unknown,
     headers: response.headers,
   } as T
 }

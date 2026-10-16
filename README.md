@@ -42,8 +42,8 @@ Vitest и Testing Library.
   порта, почему время в интерфейсе одно.
 - `vite-project/` — клиент приложения. Команды разработки — из этой папки.
 - `server/` — сервер на Spring Boot: локальный запуск, схема базы, сид окон
-  приёма и все семь операций контракта — от `GET /windows` до `GET /bookings`.
-  Подробности — в [`server/README.md`](server/README.md).
+  приёма и все восемь операций контракта — от `GET /windows` до
+  `DELETE /bookings/{id}`. Подробности — в [`server/README.md`](server/README.md).
 - `Dockerfile` в корне — образ приложения целиком: внутри собирается клиент и
   поднимается база (см. «Сборка в образ»). `server/Dockerfile` — образ одного
   сервера, он нужен `docker compose` и деплою.

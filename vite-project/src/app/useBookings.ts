@@ -1,12 +1,17 @@
 import { useCallback, useEffect, useMemo, useState } from 'react'
 
-import { bookingsCreateBooking, bookingsListBookings } from '../api/generated/calendar-api'
+import {
+  bookingsByIdDeleteBooking,
+  bookingsCreateBooking,
+  bookingsListBookings,
+} from '../api/generated/calendar-api'
 import { toDomainBookings } from '../api/bookings'
 import type { Booking } from '../domain/booking'
 import type { Slot } from '../domain/slots'
 import {
   networkRefusal,
   parseCreateResponse,
+  type CancelOutcome,
   type CreateOutcome,
 } from './bookingRefusal'
 
@@ -125,5 +130,42 @@ export const useBookings = () => {
     [reload],
   )
 
-  return useMemo(() => ({ state, reload, create }), [state, reload, create])
+  /**
+   * Отменить Бронь.
+   *
+   * **Идентификатор приходит свыху, а почта — нет:** сверку почты делает форма
+   * до отправки, и здесь её знать не о чем. Сервер почту всё равно не проверяет,
+   * а слать её вторым запросом означало бы показать гостю защиту, которой нет.
+   *
+   * Успех — `204` без тела, то есть разбирать нечего: отмена либо прошла, либо
+   * ответил отказом, а прочих кодов контракт не описывает.
+   *
+   * **Список перечитывается только после успеха.** При отказе перечитывание
+   * мигнуло бы «Загружаем записи…», карточка ушла бы из дерева вместе с
+   * модалкой, и гость потерял бы введённую почту, ничего не узнав.
+   *
+   * Повтор после отказа безопасен, и это отличает отмену от записи: сервер
+   * отвечает `204` всегда, поэтому повторный `DELETE` ничего не сломает — а у
+   * записи повтор без ключа идемпотентности завёл бы вторую Бронь.
+   */
+  const cancel = useCallback(
+    async (id: string): Promise<CancelOutcome> => {
+      try {
+        const response = await bookingsByIdDeleteBooking(id)
+
+        if (response.status !== 204) {
+          return { kind: 'отказ' }
+        }
+      } catch {
+        return { kind: 'отказ' }
+      }
+
+      reload()
+
+      return { kind: 'отменена' }
+    },
+    [reload],
+  )
+
+  return useMemo(() => ({ state, reload, create, cancel }), [state, reload, create, cancel])
 }

@@ -416,6 +416,31 @@ class ApiOperationsTest {
     verify(bookings, times(1)).findAllByOrderByStartDtAsc();
   }
 
+  // — отмена Брони —
+
+  @Test
+  @DisplayName("DELETE /bookings/{id}: 204 без тела, и Брони нет — тоже 204")
+  void bookingIsDeletedWithEmptyBody() throws Exception {
+    var id = UUID.randomUUID();
+
+    var result = delete("/bookings/" + id);
+
+    assertThat(result.status()).isEqualTo(204);
+    // Тела нет вовсе, а не пустая строка: `204` обещает отсутствие тела, и клиент,
+    // читающий ответ как JSON, должен получить «ничего», а не «{}».
+    assertThat(result.body()).isEmpty();
+    verify(bookings).deleteById(id);
+
+    // Несуществующая Бронь — тот же ответ, и `404` означал бы проверку наличия,
+    // которой нет. Идентификатор, не разобранный в UUID, — тоже «такой Брони
+    // нет», а не «500»: обращения к базе он не добавляет.
+    var absent = delete("/bookings/not-a-uuid");
+
+    assertThat(absent.status()).isEqualTo(204);
+    assertThat(absent.body()).isEmpty();
+    verify(bookings, times(1)).deleteById(any());
+  }
+
   // — клиент с другого origin (D61) —
 
   @Test
@@ -436,20 +461,28 @@ class ApiOperationsTest {
   }
 
   @Test
-  @DisplayName("предварительный запрос проходит для записи и правки")
+  @DisplayName("предварительный запрос проходит для записи, правки и отмены")
   void preflightPassesForContractMethods() throws Exception {
-    // Ровно эти два метода уходят с телом `application/json`: без их разрешения
-    // запись и правка не прошли бы ещё до отправки, и гость увидел бы отказ
-    // при живом сервере.
-    for (var call : new String[][] {{"/bookings", "POST"}, {"/event-types/consult", "PATCH"}}) {
+    // Ровно эти три метода уходят с телом `application/json` или с пустым кодом:
+    // без их разрешения запись, правка и отмена не прошли бы ещё до отправки, и
+    // гость увидел бы отказ при живом сервере.
+    for (var call :
+        new String[][] {
+          {"/bookings", "POST"}, {"/event-types/consult", "PATCH"}, {"/bookings/42", "DELETE"}
+        }) {
       var result = preflight(call[0], "http://localhost:5173", call[1]);
 
       assertThat(result.status()).withFailMessage(() -> call[1] + " " + call[0]).isEqualTo(200);
       assertThat(result.headers().firstValue("Access-Control-Allow-Methods"))
           .hasValueSatisfying(methods -> assertThat(methods).contains(call[1]));
-      assertThat(result.headers().firstValue("Access-Control-Allow-Headers"))
-          .hasValueSatisfying(headers -> assertThat(headers).containsIgnoringCase("Content-Type"));
     }
+
+    // Заголовок запрашивают только вызовы с телом, и у DELETE его нет: браузер
+    // такого предварительного запроса не пришлёт, и разрешать там нечего.
+    var withBody = preflight("/bookings", "http://localhost:5173", "POST");
+
+    assertThat(withBody.headers().firstValue("Access-Control-Allow-Headers"))
+        .hasValueSatisfying(headers -> assertThat(headers).containsIgnoringCase("Content-Type"));
   }
 
   @Test
@@ -515,6 +548,10 @@ class ApiOperationsTest {
     return send(HttpRequest.newBuilder(URI.create("http://localhost:" + port + path)).GET());
   }
 
+  private HttpResult delete(String path) throws Exception {
+    return send(HttpRequest.newBuilder(URI.create("http://localhost:" + port + path)).DELETE());
+  }
+
   private HttpResult send(HttpRequest.Builder builder) throws Exception {
     var response = http.send(builder.build(), HttpResponse.BodyHandlers.ofString());
     return new HttpResult(response.statusCode(), response.body(), response.headers());
@@ -531,16 +568,21 @@ class ApiOperationsTest {
    * то, что нужно двум.
    */
   private HttpResult preflight(String path, String origin, String method) throws Exception {
+    var builder =
+        HttpRequest.newBuilder(URI.create("http://localhost:" + port + path))
+            .header("Origin", origin)
+            .header("Access-Control-Request-Method", method);
+
+    // Заголовок запрашивают только вызовы, у которых тело с Content-Type, — ровно
+    // POST и PATCH. Без него в ответе не будет и Access-Control-Allow-Headers, а
+    // проверка разрешения заголовков проверяла бы не то, что делает браузер.
+    if (method.equals("POST") || method.equals("PATCH")) {
+      builder.header("Access-Control-Request-Headers", "content-type");
+    }
+
     var response =
         http.send(
-            HttpRequest.newBuilder(URI.create("http://localhost:" + port + path))
-                .header("Origin", origin)
-                .header("Access-Control-Request-Method", method)
-                // Заголовок запрашивают только те вызовы, у которых тело с
-                // Content-Type, — ровно POST и PATCH. Без него в ответе не будет
-                // и Access-Control-Allow-Headers, и проверка разрешения заголовков
-                // проверяла бы не то, что делает браузер.
-                .header("Access-Control-Request-Headers", "content-type")
+            builder
                 .method("OPTIONS", HttpRequest.BodyPublishers.noBody())
                 .build(),
             HttpResponse.BodyHandlers.ofString());

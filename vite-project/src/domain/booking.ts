@@ -30,11 +30,29 @@ export interface GuestErrors {
 
 const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 
+/** Почта приводится к канону: без пробелов по краям и в нижнем регистре. */
+const normalizeEmail = (email: string): string => email.trim().toLowerCase()
+
 /** Пробелы по краям — опечатка, а не часть имени; регим почты значения не имеет. */
 export const normalizeGuest = (input: GuestInput): GuestInput => ({
   name: input.name.trim(),
-  email: input.email.trim().toLowerCase(),
+  email: normalizeEmail(input.email),
 })
+
+/**
+ * Совпадает ли введённая почта с почтой Брони.
+ *
+ * Обе стороны приводятся к одному канону — тому же, что и при записи, — иначе
+ * гость, напечатавший `Ivan@Example.com `, получил бы отказ на почте, которую
+ * записал сам же двумя экранами выше.
+ *
+ * Сравнение живёт в браузере и **от чужого не защищает**: сервер почту не
+ * сверяет, а `GET /bookings` отдаёт все Брони каждому (ADR-0004). Поле защищает
+ * от промаха по кнопке, и именно поэтому в коде названо так, а не «проверкой
+ * владельца».
+ */
+export const sameEmail = (entered: string, bookingEmail: string): boolean =>
+  normalizeEmail(entered) === normalizeEmail(bookingEmail)
 
 export const validateGuest = (input: GuestInput): GuestErrors => {
   const guest = normalizeGuest(input)
