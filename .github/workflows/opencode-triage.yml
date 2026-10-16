@@ -7,6 +7,9 @@ on:
 jobs:
   triage:
     runs-on: ubuntu-latest
+    # Как в opencode-review.yml и opencode-scheduled.yml: зависший агент
+    # жёг бы раннер все шесть часов вместо двадцати минут.
+    timeout-minutes: 20
     permissions:
       # Только комментарий к задаче: issues на запись, остальное на чтение.
       # contents: write и pull-requests: write убраны намеренно — триаж не
@@ -31,6 +34,7 @@ jobs:
       - uses: actions/checkout@v6
         if: steps.check.outputs.result == 'true'
         with:
+          fetch-depth: 1
           persist-credentials: false
 
       # Пин на SHA, а не на тег: джоб получает секрет и право комментировать
@@ -44,12 +48,34 @@ jobs:
         with:
           model: opencode/space-bunny-free
           use_github_token: true
+          # Флаг не задан → шэринг включается неявно: репозиторий публичный,
+          # а текст задачи и транскрипт ушли бы на публичный opencode.ai.
+          share: false
           prompt: |
-            Review this issue. If there's a clear fix or relevant docs:
-            - Provide documentation links
-            - Add error handling guidance for code examples
-            Otherwise, do not comment.
+            Задача этого прогона: оценить новую задачу в этом
+            репозитории и оставить не более одного комментария —
+            только если оценка получается конкретной.
 
-            Your only permitted action is one comment on this issue.
-            Never commit, push, create a branch, or open a pull request,
-            even if you are convinced the fix is obvious.
+            Правила оформления коммитов из AGENTS.md на этот прогон
+            не распространяются: ни AGENTS.md, ни соглашения о коммитах
+            не дают тебе права что-либо коммитить. Твоё единственное
+            действие — комментарий к этой задаче, не более одного.
+
+            Запрещено: git commit, git push, создание ветки, pull
+            request, правка файлов. Если кажется, что нужен фикс, —
+            опиши его словами в комментарии, но не делай.
+
+            Молчание — нормальный исход. Оставь комментарий, только
+            если выполнены оба условия:
+            1. В тексте задачи есть конкретный вопрос или дефект,
+               понятный без догадок.
+            2. В репозитории есть материал, отвечающий на него:
+               AGENTS.md, README.md, docs/ или код.
+
+            Если условия не выполнены, промолчи. Если сведений не
+            хватает, задай в комментарии один уточняющий вопрос
+            вместо догадки. Не выдумывай ссылки на документацию и
+            не пересказывай тему задачи.
+
+            Комментарий пиши по-русски и кратко: что делать автору
+            и ссылка на конкретный файл или раздел.
