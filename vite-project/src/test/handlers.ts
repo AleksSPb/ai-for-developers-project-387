@@ -15,6 +15,10 @@ import { ID_PATTERN, TEXT_LIMITS, TEXT_MINIMUMS, textLength } from '../app/textL
  * слот не найден и Тип не найден, проверка не прошла и время непригодно. Ключ
  * только по коду потерял бы половину каждого из них.
  *
+ * Ответа без тела в таблице быть не может: пары «код и модель» у него не
+ * существует. Успех `204` у отмены Брони отвечает заглушка хранилища — см.
+ * `storeHandlers`.
+ *
  * Заглушки лежат рядом с тестами, а не в сгенерированной папке: сгенерированное
  * не коммитится, и заглушки из него уехали бы вместе с выгрузкой.
  */
@@ -216,6 +220,13 @@ export const stubbedResponses: Record<StubbedOperation, StubbedResponse[]> = {
     { status: 503, model: 'ServiceUnavailableError', body: stubServiceUnavailable },
   ],
 
+  // Успеха `204` здесь нет: тела у него нет, а пара «код и модель» без тела не
+  // составляется. Описать его в таблице было бы враньём тесту сверки, который
+  // ищет ровно те пары, что есть в спецификации.
+  'DELETE /bookings/{id}': [
+    { status: 503, model: 'ServiceUnavailableError', body: stubServiceUnavailable },
+  ],
+
   'GET /event-types': [
     { status: 200, model: 'EventTypeList', body: stubEventTypeList },
     { status: 503, model: 'ServiceUnavailableError', body: stubServiceUnavailable },
@@ -275,27 +286,45 @@ const described = (status: number, model: string, body: unknown): StubbedRespons
 })
 
 /**
+ * Ответ операции телом, которое описано в `defaults`.
+ *
+ * Отдельной функцией, а не сборкой ответа внутри `handlerFor`: у всех методов,
+ * кроме удаления, ответ собирается одинаково, а держать его копию в трёх ветвях
+ * — значило бы дать ему три места для правки.
+ */
+const respond =
+  (operation: StubbedOperation) =>
+  () => {
+    const { status, body } = stubbedResponseFor(operation)
+
+    return HttpResponse.json(body as JsonBodyType, { status })
+  }
+
+/**
  * Обработчик операции: плейсхолдер `{id}` из контракта становится `:id`.
  *
  * Один обработчик на операцию, а не по одному на ответ: MSW берёт первый
  * подходящий, поэтому обработчик на каждый код означал бы, что все, кроме
  * первого, недостижимы. Выбор ответа делает `server.use(...)`, а умолчание
  * описано в `defaults`.
+ *
+ * `undefined` — не «заглушки нет», а «за неё отвечает заглушка хранилища».
+ * Такая операция ровно одна, отмена Брони: успех у неё — пустой код без тела,
+ * назвать его в `defaults` нечем, а `HttpResponse.json` без тела не собирается.
  */
 const handlerFor = (operation: StubbedOperation) => {
   const [method, path] = operation.split(' ')
   const route = path.replace('{id}', ':id')
-  const { status, body } = stubbedResponseFor(operation)
-
-  const respond = () => HttpResponse.json(body as JsonBodyType, { status })
 
   switch (method) {
     case 'GET':
-      return http.get(route, respond)
+      return http.get(route, respond(operation))
     case 'POST':
-      return http.post(route, respond)
+      return http.post(route, respond(operation))
     case 'PATCH':
-      return http.patch(route, respond)
+      return http.patch(route, respond(operation))
+    case 'DELETE':
+      return undefined
     default:
       throw new Error(`Метод ${method} не заглушен: добавь его в stubbedResponses`)
   }
@@ -502,6 +531,20 @@ const createBooking = (body: CreateBookingBody): StubbedResponse => {
 }
 
 /**
+ * Отменить Бронь.
+ *
+ * Запись **вычищается из хранилища**, а не просто отвечает пустым кодом: иначе
+ * демо-режим без адреса сервера показывал бы гостю отменённую Бронь снова и
+ * врал бы о собственном успехе.
+ *
+ * Проверки наличия нет и быть не должно: контракт обещает `204` всегда, и
+ * заглушка, отличающая несуществующую Бронь от существующей, расходилась бы с ним.
+ */
+const deleteBooking = (id: string): void => {
+  store.bookings = store.bookings.filter((booking) => booking.id !== id)
+}
+
+/**
  * Обработчики, которые читают и пишут хранилище.
  *
  * Идут раньше общих: MSW берёт первый подходящий, и общий обработчик отвечал бы
@@ -544,6 +587,18 @@ const storeHandlers = [
 
     return HttpResponse.json(result.body as JsonBodyType, { status: result.status })
   }),
+
+  // Ответ без тела: `HttpResponse.json` требует тела, а у 204 его нет.
+  http.delete('/bookings/:id', ({ params }) => {
+    deleteBooking(String(params.id))
+
+    return new HttpResponse(null, { status: 204 })
+  }),
 ]
 
-export const handlers = [...storeHandlers, ...(Object.keys(stubbedResponses) as StubbedOperation[]).map(handlerFor)]
+export const handlers = [
+  ...storeHandlers,
+  ...(Object.keys(stubbedResponses) as StubbedOperation[])
+    .map(handlerFor)
+    .filter((handler) => handler !== undefined),
+]

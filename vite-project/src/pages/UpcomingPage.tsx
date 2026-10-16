@@ -65,7 +65,9 @@ const UpcomingPage = () => {
           {upcoming.length === 0 ? (
             <Text size="sm">Предстоящих записей нет</Text>
           ) : (
-            upcoming.map((booking) => <BookingCard key={booking.id} booking={booking} />)
+            // Отменять можно только то, что ещё не началось: у прошедшей брони
+            // кнопки нет, а на сервере запрета нет вовсе.
+            upcoming.map((booking) => <BookingCard key={booking.id} booking={booking} canCancel />)
           )}
 
           {past.length > 0 && (

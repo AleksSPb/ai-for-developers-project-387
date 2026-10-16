@@ -1,6 +1,10 @@
 import { describe, expect, it } from 'vitest'
 
-import { eventTypesCreateEventType } from '../api/generated/calendar-api'
+import {
+  bookingsByIdDeleteBooking,
+  bookingsListBookings,
+  eventTypesCreateEventType,
+} from '../api/generated/calendar-api'
 import { TEXT_LIMITS } from '../app/textLimits'
 import './server'
 
@@ -67,5 +71,47 @@ describe('заглушка отвергает слишком длинное зн
 
     expect(allowed.status).toBe(201)
     expect((await create({ name: `${hundred}👍` })).status).toBe(422)
+  })
+})
+
+/**
+ * Отмена Брони заглушкой.
+ *
+ * Проверяется через список, а не по коду ответа: `204` присылает и заглушка,
+ * которая ничего не удаляет, а демо-режим без адреса сервера на ней и живёт.
+ * Заглушка, отвечающая успехом и оставляющая Бронь на месте, врала бы ровно там,
+ * где её и проверяют руками.
+ */
+describe('заглушка отменяет Бронь', () => {
+  /**
+   * Брони из заглушки.
+   *
+   * Отказ здесь означает, что сломалась заглушка, а не что Броней нет: тест про
+   * отмену не должен проходить на пустом списке.
+   */
+  const stubBookings = async () => {
+    const response = await bookingsListBookings()
+
+    if (response.status !== 200) {
+      throw new Error(`список Броней не пришёл: ${response.status}`)
+    }
+
+    return response.data
+  }
+
+  it('вычищает запись из хранилища', async () => {
+    const id = (await stubBookings())[0].id
+
+    const response = await bookingsByIdDeleteBooking(id)
+
+    expect(response.status).toBe(204)
+    const after = await stubBookings()
+    expect(after.map((booking) => booking.id)).not.toContain(id)
+  })
+
+  it('отвечает 204 и на несуществующей Брони', async () => {
+    // Проверки наличия нет и быть не должно: контракт обещает 204 всегда, и
+    // заглушка, отличающая одну Броню от другой, расходилась бы с ним.
+    expect((await bookingsByIdDeleteBooking('booking-нет-такой')).status).toBe(204)
   })
 })

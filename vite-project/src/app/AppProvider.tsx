@@ -2,7 +2,7 @@ import { useCallback, useMemo, useRef, type ReactNode } from 'react'
 
 import { validateGuest } from '../domain/booking'
 import { useBookings } from '../app/useBookings'
-import type { CreateOutcome, GuestField } from './bookingRefusal'
+import type { CancelOutcome, CreateOutcome, GuestField } from './bookingRefusal'
 import { useNow } from './useNow'
 import { AppContext } from './appContext'
 
@@ -20,7 +20,7 @@ export interface AppProviderProps {
 }
 
 export const AppProvider = ({ children }: AppProviderProps) => {
-  const { state, create, reload } = useBookings()
+  const { state, create, cancel, reload } = useBookings()
   const now = useNow()
 
   /**
@@ -69,6 +69,15 @@ export const AppProvider = ({ children }: AppProviderProps) => {
   )
 
   /**
+   * Отменить Бронь.
+   *
+   * Проверки почты здесь нет и не может быть: сервер её не сверяет, а лишний
+   * запрос означал бы, что защита есть. Проверка живёт в форме отмены, где гость
+   * вводит почту, и защищает от промаха по кнопке, а не от чужого.
+   */
+  const cancelBooking = useCallback((id: string): Promise<CancelOutcome> => cancel(id), [cancel])
+
+  /**
    * Повторить чтение всех источников страницы.
    *
    * Единственный повтор в приложении, и он только по действию гостя: автоматических
@@ -87,10 +96,11 @@ export const AppProvider = ({ children }: AppProviderProps) => {
       now,
       reload,
       addBooking,
+      cancelBooking,
       retryAll,
       registerSources,
     }),
-    [state, now, reload, addBooking, retryAll, registerSources],
+    [state, now, reload, addBooking, cancelBooking, retryAll, registerSources],
   )
 
   return <AppContext value={value}>{children}</AppContext>

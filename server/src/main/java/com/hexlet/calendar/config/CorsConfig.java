@@ -12,9 +12,10 @@ import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
  *
  * <p>Клиент раздаётся Vite с {@code http://localhost:5173}, а сервер отвечает с
  * {@code http://localhost:8080}. Для браузера это два разных источника, и без
- * разрешения он отбрасывает ответы: {@code GET} — молча, а {@code POST} и
- * {@code PATCH} ещё и на предварительном запросе, который без разрешения
- * отклоняется вовсе. Записаться с живым сервером было бы нельзя.
+ * разрешения он отбрасывает ответы: {@code GET} — молча, а {@code POST},
+ * {@code PATCH} и {@code DELETE} ещё и на предварительном запросе, который без
+ * разрешения отклоняется вовсе. Записаться или отменить бронь с живым сервером
+ * было бы нельзя.
  *
  * <p>Разрешение живёт здесь, а не прокси в Vite, потому что адрес сервера приходит
  * в клиент извне ({@code VITE_API_BASE_URL}) и однажды будет указывать не на
@@ -31,8 +32,8 @@ import org.springframework.web.servlet.config.annotation.WebMvcConfigurer;
  *
  * <p>Куки и авторизация не участвуют ({@code allowCredentials} не включён), и
  * разрешён ровно тот набор, что описан контрактом: {@code GET}, {@code POST},
- * {@code PATCH}. Заголовок — только {@code Content-Type}: клиент шлёт его с телом
- * записи, и больше ничего.
+ * {@code PATCH}, {@code DELETE}. Заголовок — только {@code Content-Type}: клиент
+ * шлёт его с телом записи, и больше ничего.
  */
 @Configuration(proxyBeanMethods = false)
 public class CorsConfig implements WebMvcConfigurer {
@@ -71,7 +72,7 @@ public class CorsConfig implements WebMvcConfigurer {
     registry
         .addMapping("/**")
         .allowedOrigins(allowedOrigins)
-        .allowedMethods("GET", "POST", "PATCH", "OPTIONS")
+        .allowedMethods("GET", "POST", "PATCH", "DELETE", "OPTIONS")
         .allowedHeaders("Content-Type")
         .maxAge(3600);
   }
