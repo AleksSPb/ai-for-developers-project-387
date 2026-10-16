@@ -39,6 +39,10 @@ jobs:
         env:
           OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # TOKEN, а не use_github_token: экшен отдаёт USE_GITHUB_TOKEN, а
+          # CLI читает TOKEN, поэтому права актора проверяются всегда, а у
+          # PR, открытого ботом, актор без прав и джоба падает.
+          TOKEN: ${{ secrets.GITHUB_TOKEN }}
         with:
           model: opencode/space-bunny-free
           use_github_token: true
